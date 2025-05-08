@@ -1,0 +1,401 @@
+#code for database
+
+
+
+-- Table: Owner
+CREATE TABLE Owner (
+    owner_id INT  PRIMARY KEY,
+    oname VARCHAR(100) ,
+    email VARCHAR(100) UNIQUE ,
+    opassword VARCHAR(100),
+    contact_no VARCHAR(15) 
+);
+
+-- Table: Address
+CREATE TABLE Address (
+    address_id INT PRIMARY KEY,
+    city VARCHAR(50),
+    state VARCHAR(50) ,
+    pincode VARCHAR(10) ,
+    owner_id INT UNIQUE ,
+    FOREIGN KEY (owner_id) REFERENCES Owner(owner_id)
+);
+
+-- Table: Service
+CREATE TABLE Service (
+    service_id INT PRIMARY KEY,
+    sname VARCHAR(100),
+    cost DECIMAL(10, 2) CHECK (cost >= 0)
+);
+
+-- Table: Staff
+CREATE TABLE Staff (
+    staff_id INT PRIMARY KEY,
+    sname VARCHAR(100) NOT NULL,
+    age INT CHECK (age >= 0),
+    email VARCHAR(100) UNIQUE NOT NULL,
+    spassword VARCHAR(100) NOT NULL,
+    contact_no VARCHAR(15) NOT NULL,
+    doj DATE NOT NULL,
+    salary DECIMAL(10, 2) CHECK (salary >= 0),
+    service_id INT,
+    FOREIGN KEY (service_id) REFERENCES Service(service_id)
+);
+
+-- Table: Pet
+CREATE TABLE Pet (
+    pet_id INT PRIMARY KEY,
+    pname VARCHAR(100) ,
+    age INT CHECK (age >= 0),
+    breed VARCHAR(50),
+    owner_id INT,
+    staff_id INT,
+    FOREIGN KEY (owner_id) REFERENCES Owner(owner_id),
+    FOREIGN KEY (staff_id) REFERENCES Staff(staff_id)
+);
+
+-- Table: Medical_Record
+CREATE TABLE Medical_Record (
+    medical_id INT PRIMARY KEY,
+    mdate DATE,
+    mdescription VARCHAR(500) ,
+    pet_id INT ,
+    staff_id INT,
+    FOREIGN KEY (pet_id) REFERENCES Pet(pet_id),
+    FOREIGN KEY (staff_id) REFERENCES Staff(staff_id)
+);
+
+-- Table: Appointment
+CREATE TABLE Appointment (
+    appointment_id INT PRIMARY KEY,
+    service_start DATE ,
+    service_end DATE,
+    adate DATE ,
+    astatus VARCHAR(50) DEFAULT 'Pending',
+    pet_id INT ,
+    owner_id INT,
+    service_id INT ,
+    FOREIGN KEY (pet_id) REFERENCES Pet(pet_id),
+    FOREIGN KEY (owner_id) REFERENCES Owner(owner_id),
+    FOREIGN KEY (service_id) REFERENCES Service(service_id),
+    CHECK (service_end >= service_start)
+);
+
+-- Table: Admin
+CREATE TABLE Admin (
+    admin_id INT PRIMARY KEY,
+    aname VARCHAR(100) NOT NULL,
+    age INT CHECK (age >= 0),
+    email VARCHAR(100) UNIQUE NOT NULL,
+    apassword VARCHAR(100) NOT NULL,
+    contact_no VARCHAR(15) NOT NULL
+);
+
+-- Table: Payment
+CREATE TABLE Payment (
+    payment_id INT  PRIMARY KEY,
+    method VARCHAR(50) ,
+    pdate DATE ,
+    amount DECIMAL(10, 2) CHECK (amount >= 0),
+    pstatus VARCHAR(50) DEFAULT 'Unpaid',
+    appointment_id INT,
+    admin_id INT ,
+    FOREIGN KEY (appointment_id) REFERENCES Appointment(appointment_id),
+    FOREIGN KEY (admin_id) REFERENCES Admin(admin_id),
+    CHECK ((pstatus = 'Paid' AND pdate IS NOT NULL) OR (pstatus = 'Pending' AND pdate IS NULL))
+
+);
+
+--functions and triggers
+--
+
+CREATE OR REPLACE FUNCTION fn_days_between(dt1 DATE, dt2 DATE)
+RETURN INT
+IS
+  days_diff INT;
+BEGIN
+  days_diff := dt2 - dt1+1;
+  RETURN  days_diff;
+END;
+
+CREATE OR REPLACE FUNCTION fn_total_cost (
+  svc IN NUMBER,
+  days IN NUMBER
+) RETURN NUMBER IS
+  unit_cost NUMBER(10, 2);
+BEGIN
+  SELECT cost INTO unit_cost FROM Service WHERE service_id = svc;
+  RETURN unit_cost * days;
+END;
+
+CREATE OR REPLACE TRIGGER trg_calc_payment_amount
+BEFORE INSERT OR UPDATE ON Payment
+FOR EACH ROW
+DECLARE
+  v_service_id NUMBER;
+  v_start DATE;
+  v_end DATE;
+  v_days NUMBER;
+BEGIN
+  -- Fetch appointment start, end date and service_id
+  SELECT service_start, service_end, service_id
+  INTO v_start, v_end, v_service_id
+  FROM Appointment
+  WHERE appointment_id = :NEW.appointment_id;
+
+  -- Call your existing functions
+  v_days := fn_days_between(v_start, v_end);
+  :NEW.amount := fn_total_cost(v_service_id, v_days);
+END;
+
+
+CREATE OR REPLACE TRIGGER trg_update_astatus
+BEFORE INSERT OR UPDATE ON Appointment
+FOR EACH ROW
+BEGIN
+  IF :NEW.service_end >= SYSDATE THEN
+    :NEW.astatus := 'Scheduled';
+  ELSE
+    :NEW.astatus := 'Completed';
+  END IF;
+END;
+
+
+
+
+
+
+INSERT INTO Owner (owner_id, oname, email, opassword, contact_no) VALUES
+(1, 'Fiona Green', 'fiona@example.com', 'fionapass', '9123456700'),
+(2, 'George Hall', 'george@example.com', 'georgepass', '9123456701'),
+(3, 'Hannah Scott', 'hannah@example.com', 'hannahpass', '9123456702'),
+(4, 'Ian Moore', 'ian@example.com', 'ianpass', '9123456703'),
+(5, 'Julia Adams', 'julia@example.com', 'juliapass', '9123456704'),
+(6,'Rahul Verma', 'rahulv@example.com', 'rahul123', '9990011223'),
+(7,'Sneha Kapoor', 'sneha.k@example.com', 'sneha456', '9990011224'),
+(8,'Amit Jain', 'amit.j@example.com', 'amit789', '9990011225'),
+(9,'Divya Rana', 'divya.r@example.com', 'divya000', '9990011226'),
+(10,'Divya Jyoti', 'divyajyoti.r@example.com', 'jyoti000', '9990011567');
+
+
+
+INSERT INTO Address (address_id, city, state, pincode, owner_id) VALUES
+(1, 'Amritsar', 'Punjab', '143001', 1),
+(2, 'Ludhiana', 'Punjab', '141001', 2),
+(3, 'Jalandhar', 'Punjab', '144001', 3),
+(4, 'Patiala', 'Punjab', '147001', 4),
+(5, 'Bathinda', 'Punjab', '151001', 5),
+(6,'Panchkula', 'Haryana', '134112', 6),
+(7,'Hisar', 'Haryana', '125001', 7),
+(8,'Shimla', 'Himachal Pradesh', '171001', 8),
+(9,'Karnal', 'Haryana', '132001', 9),
+(10,'Solan','Himachal Pradesh','173212',10);
+
+
+INSERT INTO Service (service_id, sname, cost) VALUES
+(1, 'Premium_care', 500.00),
+(2, 'Standard_care', 300.00),
+(3, 'Basic_care', 400.00);
+
+INSERT INTO Staff (staff_id, sname, age, email, spassword, contact_no, doj, salary, service_id) VALUES
+(1, 'Alice', 28, 'alice@example.com', 'alicepass', '9876543210', '15-JAN-2025', 25000.00, 1),
+(2, 'Bob', 32, 'bob@example.com', 'bobpass', '9876543211', '20-FEB-2025', 26000.00, 1),
+(3, 'Charlie', 29, 'charlie@example.com', 'charliepass', '9876543212', '10-MAR-2025', 25500.00, 1),
+(4, 'Diana', 35, 'diana@example.com', 'dianapass', '9876543213', '5-FEB-2025', 27000.00, 2),
+(5, 'Ethan', 30, 'ethan@example.com', 'ethanpass', '9876543214', '17-FEB-2025', 26500.00, 2),
+(6, 'Ravi', 28, 'ravi.k@petcare.com', 'raviPass123', '9012345678', '01-FEB-2025', 30000.00, 2),
+(7, 'Anjali', 31, 'anjali.v@petcare.com', 'anjaliSecure', '8899776655', '26-MAR-2025', 28000.00, 2),
+(8, 'Neeraj', 26, 'neeraj.d@petcare.com', 'dasPass098', '7788990011', '22-FEB-2025', 25000.00, 3),
+(9, 'Tina', 35, 'tina.d@petcare.com', 'tinaLovePets', '9911223344', '26-MAR-2025', 31000.00, 3),
+(10, 'Aditya Menon', 30, 'aditya.m@petcare.com', 'adiStrong456', '9090909090', '27-JAN-2025', 27000.00, 3);
+
+INSERT INTO Pet (pet_id, pname, age, breed, owner_id, staff_id) VALUES
+(1, 'Buddy', 3, 'Labrador', 1, 1),
+(2, 'Milo', 2, 'Beagle', 2, 2),
+(3, 'Luna', 4, 'Poodle', 3, 4),
+(4, 'Max', 1, 'Bulldog', 1, 8),
+(5, 'Bella', 5, 'German Shepherd', 4, 6),
+(6,'Tiger', 4, 'Doberman', 6, 3),
+(7,'Daisy', 2, 'Shih Tzu', 7, 5),
+(8,'Oscar', 1, 'Pomeranian', 8, 7),
+(9,'Tommy', 6, 'Husky', 9, 9),
+(10, 'Lily', 3, 'Chihuahua', 10, 10);
+
+
+CREATE OR REPLACE TRIGGER trg_calc_payment_amount
+BEFORE INSERT OR UPDATE ON Payment
+FOR EACH ROW
+DECLARE
+  v_service_id NUMBER;
+  v_start DATE;
+  v_end DATE;
+  v_days NUMBER;
+BEGIN
+  -- Fetch appointment start, end date and service_id
+  SELECT service_start, service_end, service_id
+  INTO v_start, v_end, v_service_id
+  FROM Appointment
+  WHERE appointment_id = :NEW.appointment_id;
+
+  -- Call your existing functions
+  v_days := fn_days_between(v_start, v_end);
+  :NEW.amount := fn_total_cost(v_service_id, v_days);
+END;
+
+
+
+
+
+INSERT INTO Appointment (appointment_id, service_start, service_end, adate, pet_id, owner_id, service_id) VALUES
+(1, '10-APR-2025', '14-APR-2025 ', '9-APR-2025', 1, 1, 1),
+(2, '5-MAY-2025', '9-MAY-2025', '3-MAY-2025', 2, 2, 1),
+(3, '7-MAY-2025', '10-MAY-2025', '5-MAY-2025', 4, 1, 2),
+(4, '14-APR-2025', '18-APR-2025', '12-APR-2025', 3, 3, 3),
+(5, '14-APR-2025', '20-APR-2025', '8-APR-2025',  5, 4, 2),
+(6, '18-APR-2025', '20-APR-2025', '17-APR-2025', 6, 6, 1),
+(7, '19-APR-2025', '19-APR-2025', '18-APR-2025', 7, 7, 2),
+(8, '4-MAY-2025', '12-MAY-2025', '1-MAY-2025', 8, 8, 2),
+(9, '21-APR-2025', '25-APR-2025', '20-APR-2025', 9, 9, 3),
+(10,'22-APR-2025', '26-APR-2025', '21-APR-2025',  10, 10, 3);
+
+
+INSERT INTO Admin (admin_id, aname, age, email, apassword, contact_no) VALUES
+(1, 'Admin One', 35, 'admin1@example.com', 'adminpass1', '9876576890');
+
+INSERT INTO Medical_Record (medical_id, mdate, mdescription, pet_id, staff_id) VALUES
+(1, '14-APR-2025','Routine health monitoring during boarding. Vital signs normal, pet active and eating well.', 1, 1),
+(2, NULL,NULL, 2, 2),
+(3, '18-APR-2025', 'Observed dietary intake and bowel movements. Pet showed healthy appetite and digestion', 3, 4),
+(4, NULL, NULL, 4, 8),
+(5, '20-APR-2025', 'Pet engaged in play and light exercise activities. Behavior positive and responsive', 5, 6),
+(6, '25-APR-2025', 'Vaccination for rabies completed.', 9, 9),
+(7, '26-APR-2025', 'Regular checkup and nail trimming.', 10, 10),
+(8, '20-APR-2025', 'Pet showed mild fever; medication given.', 6, 3),
+(9, '19-APR-2025', 'Allergy symptoms; monitored and fed hypoallergenic food.', 7, 5),
+(10,NULL,NULL, 8, 7);
+
+INSERT INTO Payment (payment_id, method, pdate, pstatus, appointment_id, admin_id) VALUES
+(1, 'Cash', TO_DATE('10-APR-2025', 'DD-MON-YYYY'),  'Paid', 1, 1),
+(2, 'UPI', TO_DATE('3-MAY-2025', 'DD-MON-YYYY'),  'Paid', 2, 1),
+(3, 'Cash', NULL, 600.00, 'Pending', 3, 1),
+(4, 'UPI', TO_DATE('12-APR-2025', 'DD-MON-YYYY'), 'Paid', 4, 1),
+(5, 'Cash', NULL,'Pending', 5, 1),
+(6, 'Cash', TO_DATE('18-APR-2025', 'DD-MON-YYYY'),'Paid', 6, 1),
+(7, 'Cash', NULL, 'Pending', 7, 1),
+(8, 'Credit Card', TO_DATE('1-MAY-2025', 'DD-MON-YYYY'), 'Paid', 8, 1),
+(9, 'Cash', NULL, 'Pending', 9, 1),
+(10, 'Cash', TO_DATE('22-APR-2025', 'DD-MON-YYYY'), 'Paid', 10, 1);
+
+
+select * from Owner;
+select * from Address;
+select * from Service;
+select * from Staff;
+select * from Pet;
+select * from medical_record;
+select * from appointment;
+select * from admin;
+select * from payment;
+
+-- List every pet along with its owner and assigned staff
+SELECT p.pet_id, p.pname, o.oname AS owner_name, s.sname AS staff_name
+FROM Pet p
+JOIN Owner o ON p.owner_id = o.owner_id
+JOIN Staff s ON p.staff_id = s.staff_id;
+
+-- Show all appointments with service name
+SELECT a.appointment_id, s.sname AS service_name, TO_CHAR(adate, 'DD-MON-YYYY') as appointment_date, a.astatus
+FROM Appointment a
+JOIN Service s ON a.service_id = s.service_id;
+
+-- scheduled appointments
+SELECT appointment_id,oname,astatus FROM Appointment a join owner o on a.owner_id=o.owner_id
+WHERE astatus = 'Scheduled'
+ORDER BY service_start;
+ 
+ -- Count of pets per owner
+SELECT o.owner_id, o.oname, COUNT(p.pet_id) AS num_pets
+FROM Owner o
+LEFT JOIN Pet p ON o.owner_id = p.owner_id
+GROUP BY o.owner_id, o.oname;
+
+-- List all outstanding (pending) payments
+SELECT *
+FROM Payment
+WHERE pstatus = 'Pending';
+
+-- Owners whose pets have had more than 3 appointments
+SELECT DISTINCT o.owner_id, o.oname
+FROM Owner o
+WHERE EXISTS (
+  SELECT 1 FROM Pet p
+  JOIN Appointment a ON p.pet_id = a.pet_id
+  WHERE p.owner_id = o.owner_id
+  GROUP BY p.pet_id
+  HAVING COUNT(*) > 1
+);
+
+-- Average appointment length per service
+SELECT s.sname,
+       AVG(((a.service_end)-(a.service_start))) AS avg_days
+FROM Service s
+JOIN Appointment a ON s.service_id = a.service_id
+GROUP BY s.service_id, s.sname;
+
+--no of days services provided
+
+
+SELECT 
+  appointment_id,oname,
+  TO_CHAR(service_start, 'DD-MON-YYYY') as service_start,
+  TO_CHAR(service_end, 'DD-MON-YYYY') as service_end,
+  fn_days_between(service_start, service_end) AS service_duration_days
+  FROM
+  Appointment a join Owner o on a.owner_id=o.owner_id;
+
+
+-- View all staff details along with their service name
+SELECT s.staff_id, s.sname, s.age, s.email, s.contact_no, s.salary, sv.sname AS service_name
+FROM Staff s
+LEFT JOIN Service sv ON s.service_id = sv.service_id;
+
+--List all upcoming appointments with owner and pet details
+SELECT a.appointment_id, TO_CHAR(a.service_start,'DD-MON-YYYY')as service_start, 
+TO_CHAR(a.service_end,'DD-MON-YYYY') as service_end,TO_CHAR (a.adate,'DD-MON-YYYY')as
+app_date, a.astatus,
+       o.oname AS owner_name, p.pname AS pet_name, s.sname AS service_name
+FROM Appointment a
+JOIN Owner o ON a.owner_id = o.owner_id
+JOIN Pet p ON a.pet_id = p.pet_id
+JOIN Service s ON a.service_id = s.service_id
+WHERE a.astatus = 'Scheduled'
+ORDER BY a.service_start;
+
+SELECT pstatus, SUM(amount) AS total_amount
+FROM Payment
+GROUP BY pstatus;
+
+SELECT mr.medical_id, TO_CHAR(mr.mdate,'DD-MON-YYYY')as medical_date, mr.mdescription, st.sname AS staff_name
+,p.pname as pet_name
+FROM Medical_Record mr
+JOIN Staff st  ON mr.staff_id = st.staff_id JOIN Pet p on p.staff_id=st.staff_id
+WHERE mr.pet_id = 1;
+
+SELECT s.*
+FROM Staff s
+WHERE s.service_id IS NULL;
+
+--47. fn_total_cost(service_id, num_days)
+
+
+SELECT 
+  a.appointment_id,
+  o.oname,
+  TO_CHAR(a.service_start, 'DD-MON-YYYY') AS service_start,
+  TO_CHAR(a.service_end, 'DD-MON-YYYY') AS service_end,
+  fn_days_between(a.service_start, a.service_end) AS service_duration_days,
+  fn_total_cost(a.service_id, fn_days_between(a.service_start, a.service_end)) AS total_cost
+FROM
+  Appointment a
+  JOIN Owner o ON a.owner_id = o.owner_id
+  JOIN Service s ON a.service_id = s.service_id;
